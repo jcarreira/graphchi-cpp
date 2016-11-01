@@ -1,0 +1,1 @@
+[joao@f1:/data/joao/graphchi-cpp/src/interception]%  LD_PRELOAD=src/interception/interc.so ./bin/example_apps/pagerank file /data/joao/ligra/utils/my_edge_10M
