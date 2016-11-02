@@ -1,11 +1,21 @@
 
-CXX=g++
-CFLAGS=-O3 -Wall
-#-ggdb
-LDFLAGS=-ldl -fPIC
-PROJ=wrapper
+CXX       = g++
+CC        = gcc
+CXXFLAGS  = -Wall -std=c++11 -ggdb
+CFLAGS    = -Wall -ggdb
+#-fPIC
+LDFLAGS   = -ldl
+#-fPIC
+INCLUDES  = -I/data/joao/ddc/src/client/  -I/data/joao/ddc/
+LINCLUDES = -L/data/joao/ddc/src/client/
+LIBS      = -lclient
+PROJ      = wrapper
 
 all:
-	$(CXX) $(CFLAGS) -o $(PROJ).so -shared $(PROJ).cpp $(LDFLAGS)
-	gcc -shared -o interc.so interc.o -ldl
-	gcc -fPIC -c -o interc.o interc.cpp
+	$(CXX) $(CXXFLAGS) -fPIC -o $(PROJ).so -shared $(PROJ).cpp $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -fPIC $(INCLUDES) -o blade_layer.so -shared blade_layer.cpp $(LDFLAGS) $(LINCLUDES) $(LIBS) -libverbs -lrdmacm
+	$(CC) $(CFLAGS) -fPIC -c -o interc.o interc.c -libverbs -lrdmacm
+	$(CC) $(CFLAGS) -shared -o interc.so interc.o -ldl -libverbs -lrdmacm
+
+clean:
+	rm *.o *.so -rf
