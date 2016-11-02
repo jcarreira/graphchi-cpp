@@ -7,8 +7,8 @@ CFLAGS    = -Wall -ggdb
 LDFLAGS   = -ldl
 #-fPIC
 INCLUDES  = -I/data/joao/ddc/src/client/  -I/data/joao/ddc/
-LINCLUDES = -L/data/joao/ddc/src/client/
-LIBS      = -lclient
+LINCLUDES = -L/data/joao/ddc/src/client/ -L/data/joao/ddc/src/common/ -L/data/joao/ddc/src/utils/
+LIBS      = -lclient -lcommon -lutils
 PROJ      = wrapper
 
 all:

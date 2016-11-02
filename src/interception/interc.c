@@ -8,8 +8,9 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <time.h>
+#include <string.h>
 
-#define DISK
+//#define DISK
 
 FILE* (*_fopen)(const char *path, const char *mode);
 size_t (*_fwrite)(const void*, size_t, size_t, FILE*);
@@ -53,14 +54,15 @@ typedef unsigned long long int ull;
 static void init() __attribute__((constructor));
 static void my_exit() __attribute__((destructor));
 
+char is_good_fd[10000] = {0};
+
 void my_exit() {
    dlclose(handle);
 }
     
 char inited = 0;
 void init() {
-    inited++;
-    if (inited != 1) {
+    if (inited != 0) {
         return;
     }
 
@@ -83,6 +85,7 @@ void init() {
    blade_close = (bclose_f)dlsym(handle, "blade_close");
    
    puts("init() done");
+   inited++;
 }
 
 unsigned long long int get_time()
@@ -132,18 +135,23 @@ int open(const char * pathname, int flags, mode_t mode)
         first = 1;
         puts("Calling blade init");
         blade_init_();
+        puts("Blade init done");
     }
-   // if (!_open) {
-   //     _open = (int (*)(const char * pathname, int flags, mode_t)) dlsym(RTLD_NEXT, "open");
-
-   //     puts("Calling blade init");
-   // //    blade_init_();
-   // }
 
 #ifdef DISK
     return _open(pathname, flags, mode);
 #else
-    return blade_open(pathname, flags, mode);
+    if (strncmp("/sys", pathname, 4) == 0 ||
+            strncmp("/dev", pathname, 4) == 0) {
+        printf("regular open: %s\n", pathname);
+        return _open(pathname, flags, mode);
+    }
+    else {
+        printf("blade_open\n");
+        int ret = blade_open(pathname, flags, mode);
+        is_good_fd[ret] = 1;
+        return ret;
+    }
 #endif
 }
 
@@ -155,12 +163,15 @@ int open64(const char * pathname, int flags, mode_t mode)
 }
 
 int close(int fd) {
-//    puts("close");
+    puts("close");
 #ifdef DISK
     int ret = _close(fd);
     return ret;
 #else
-    return blade_close(int fd);
+    if (is_good_fd[fd])
+        return blade_close(fd);
+    else
+        return _close(fd);
 #endif
 }
 
@@ -197,12 +208,15 @@ ssize_t write(int fd, const void *buf, size_t count) {
     ssize_t ret = _write(fd, buf, count);
     return ret;
 #else
-    return blade_write(fd, buf, count);
+    if (is_good_fd[fd])
+        return blade_write(fd, buf, count);
+    else
+        return _write(fd, buf, count);
 #endif
 }
 
 ssize_t pread(int fd, void *buf, size_t count, off_t offset) {
-    //puts("pread");
+    puts("pread");
     ull start = get_time();
     init_mapping();
 #ifdef DISK
@@ -210,7 +224,10 @@ ssize_t pread(int fd, void *buf, size_t count, off_t offset) {
     printf("size: %lu %llu\n", count, get_time() - start);
     return ret;
 #else
-    return blade_pread(fd, buf, count, offset);
+    if (is_good_fd[fd])
+        return blade_pread(fd, buf, count, offset);
+    else
+        return _pread(fd, buf, count, offset);
 #endif
 }
 
@@ -222,7 +239,10 @@ ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset) {
     ssize_t ret = _pwrite(fd, buf, count, offset);
     return ret;
 #else
-    return blade_pwrite(fd, buf, count, offset);
+    if (is_good_fd[fd])
+        return blade_pwrite(fd, buf, count, offset);
+    else
+        return _pwrite(fd, buf, count, offset);
 #endif
 }
 
@@ -234,7 +254,10 @@ ssize_t read(int fd, void *buf, size_t count) {
     ssize_t ret = _read(fd, buf, count);
     return ret;
 #else
-    return blade_read(fd, buf, count);
+    if (is_good_fd[fd])
+        return blade_read(fd, buf, count);
+    else
+        return _read(fd, buf, count);
 #endif
 }
 
@@ -277,11 +300,15 @@ int lstat(const char *path, struct stat *buf) {
 }
 
 off_t lseek(int fd, off_t offset, int whence) {
+    puts("lseek");
     init_mapping();
 #ifdef DISK
     return lseek_(fd, offset, whence);
 #else
-    return blade_lseek(fd, buf, count, offset);
+    if (is_good_fd[fd])
+        return blade_lseek(fd, offset, whence);
+    else
+        return lseek_(fd, offset, whence);
 #endif
 }
 
