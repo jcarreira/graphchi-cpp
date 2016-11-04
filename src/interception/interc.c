@@ -20,7 +20,8 @@ ssize_t (*_pwrite)(int fd, const void *buf, size_t count, off_t offset);
 int (*_close)(int fd);
 int (*_fclose)(FILE*);
 int (*_open64)(const char * pathname, int flags, mode_t mode);
-int (*_open)(const char * pathname, int flags, mode_t mode);
+int (*_open)(const char * pathname, int flags, ...);
+int (*_open2)(const char * pathname, int flags);
 ssize_t (*_write)(int fd, const void* bug, size_t count);
 off_t (*lseek_)(int fd, off_t offset, int whence);
 
@@ -31,7 +32,10 @@ typedef ssize_t (*bpwrite_f)(int, const void*, size_t, off_t);
 typedef ssize_t (*bread_f)(int, void*, size_t);
 typedef ssize_t (*bpread_f)(int, void*, size_t, off_t);
 typedef int (*bopen_f)(const char*, int, mode_t);
+typedef FILE (*bfopen_f)(const char*, const char*);
+typedef int (*bopen2_f)(const char*, int);
 typedef int (*bclose_f)(int);
+typedef int (*bftruncate_f)(int);
 typedef off_t (*blseek_f)(int, off_t, int);
 typedef void (*binit_f)();
 
@@ -40,9 +44,11 @@ bpwrite_f blade_pwrite;
 bread_f blade_read;
 bpread_f blade_pread;
 bopen_f blade_open;
+bopen2_f blade_open2;
 bopen_f blade_open64;
 blseek_f blade_lseek;
 bclose_f blade_close;
+bftruncate_f blade_ftruncate;
 binit_f blade_init_;
 void* handle;
 
@@ -101,14 +107,14 @@ void init_mapping() {
         return;
     mapping_inited = 1;
         
-    _open = (int (*)(const char * pathname, int flags, mode_t))
+    _open = (int (*)(const char * pathname, int flags, ...))
         dlsym(RTLD_NEXT, "open");
     _open64 = (int (*)(const char * pathname, int flags, mode_t))
         dlsym(RTLD_NEXT, "open64");
     _close = (int (*)(int fd))
         dlsym(RTLD_NEXT, "close");
-    //_fopen = (FILE* (*)(const char *path, const char *mode))
-    //    dlsym(RTLD_NEXT, "fopen");
+    _fopen = (FILE* (*)(const char *path, const char *mode))
+        dlsym(RTLD_NEXT, "fopen");
     _write = (ssize_t (*)(int fd, const void* bug, size_t count))
         dlsym(RTLD_NEXT, "write");
     _pread = (ssize_t (*)(int fd, void *buf, size_t count, off_t offset))
@@ -126,7 +132,7 @@ void init_mapping() {
 }
 
 char first = 0;
-int open(const char * pathname, int flags, mode_t mode)
+int open(const char * pathname, int flags, ...)
 {
     printf("open fname: %s\n", pathname);
     init_mapping();
@@ -139,21 +145,24 @@ int open(const char * pathname, int flags, mode_t mode)
     }
 
 #ifdef DISK
-    return _open(pathname, flags, mode);
+    return _open(pathname, flags);
+    //return _open(pathname, flags, mode);
 #else
     if (strncmp("/sys", pathname, 4) == 0 ||
             strncmp("/dev", pathname, 4) == 0) {
         printf("regular open: %s\n", pathname);
-        return _open(pathname, flags, mode);
+        return _open(pathname, flags);
+        //return _open(pathname, flags, mode);
     }
     else {
         printf("blade_open\n");
-        int ret = blade_open(pathname, flags, mode);
+        int ret = blade_open(pathname, flags, 0);
         is_good_fd[ret] = 1;
         return ret;
     }
 #endif
 }
+
 
 int open64(const char * pathname, int flags, mode_t mode)
 {
@@ -181,13 +190,12 @@ int creat(const char *pathname, mode_t mode) {
     return 0;
 }
 
-//FILE *fopen(const char *path, const char *mode) {
-//    //ull start = get_time();
-//    init_mapping();
-//    FILE* ret = _fopen(path, mode);
-//    //printf("%llu\n", get_time() - start);
-//    return ret;
-//}
+FILE *fopen(const char *path, const char *mode) {
+    printf("fopen path: %s\n", path);
+    init_mapping();
+    FILE* ret = _fopen(path, mode);
+    return ret;
+}
 
 //FILE *fdopen(int fd, const char *mode) {
 //    puts("fdopen");
@@ -297,6 +305,18 @@ int fstat(int fd, struct stat *buf) {
 int lstat(const char *path, struct stat *buf) {
     puts("lstat");
     exit(-1);
+}
+
+int truncate(const char *path, off_t length) {
+    puts("truncate");
+    exit(-1);
+}
+
+int ftruncate(int fd, off_t length) {
+    printf("ftruncate. fd: %d length: %lu\n", fd, length);
+    init_mapping();
+
+    return 0;
 }
 
 off_t lseek(int fd, off_t offset, int whence) {

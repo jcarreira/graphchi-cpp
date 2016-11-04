@@ -1,15 +1,15 @@
-#include <BladeClient.h>
+#include <BladeFileClient.h>
 
 #include <map>
 #include <cstdio>
 #include <iostream>
 
-sirius::BladeClient client;
+sirius::BladeFileClient client;
 
 std::map<int, size_t> fd_to_offset;
 std::map<std::string, int> path_to_fd;
-std::map<std::string, sirius::AllocRec> path_to_rec;
-std::map<int, sirius::AllocRec> fd_to_rec;
+std::map<std::string, sirius::FileAllocRec> path_to_rec;
+std::map<int, sirius::FileAllocRec> fd_to_rec;
 
 int opened_files = 100;
 
@@ -88,12 +88,10 @@ ssize_t blade_pread(int fd, void *buf, size_t count, off_t offset) {
     return count;
 }
 
-
-int (*_open)(const char * pathname, int flags, mode_t mode);
 extern "C"
 int blade_open(const char * pathname, int flags, mode_t mode) {
     puts("Blade opening");
-    sirius::AllocRec alloc = client.allocate(FILE_SIZE);
+    sirius::FileAllocRec alloc = client.allocate(pathname, FILE_SIZE);
 
     path_to_rec[pathname] = alloc;
     path_to_fd[pathname] = opened_files;

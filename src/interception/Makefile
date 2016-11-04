@@ -16,6 +16,7 @@ all:
 	$(CXX) $(CXXFLAGS) -fPIC $(INCLUDES) -o blade_layer.so -shared blade_layer.cpp $(LDFLAGS) $(LINCLUDES) $(LIBS) -libverbs -lrdmacm
 	$(CC) $(CFLAGS) -fPIC -c -o interc.o interc.c -libverbs -lrdmacm
 	$(CC) $(CFLAGS) -shared -o interc.so interc.o -ldl -libverbs -lrdmacm
+#$(CXX) $(CXXFLAGS) $(INCLUDES) -o copy_file copy_file.cpp $(LDFLAGS) $(LINCLUDES) $(LIBS) -libverbs -lrdmacm
 
 clean:
 	rm *.o *.so -rf
