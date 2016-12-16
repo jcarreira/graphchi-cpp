@@ -59,6 +59,7 @@ int main(int argc, const char ** argv) {
     char * buf = (char *) malloc(blocksize);
     for(int p=0; p < nshards; p++) {
         std::string shard_filename = filename_shard_edata<EdgeDataType>(filename, p, nshards);
+        std::cout << "Opening shard file here" << std::endl;
         int f = open(shard_filename.c_str(), O_RDONLY);
         size_t fsize = get_filesize(shard_filename);
         
@@ -85,6 +86,7 @@ int main(int argc, const char ** argv) {
         close(f);
         
         std::string sizefilename = shard_filename + ".size";
+        std::cout <<"Opening/Writing. size: " << sizefilename << std::endl; 
         std::ofstream ofs(sizefilename.c_str());
         ofs << fsize;
         ofs.close();

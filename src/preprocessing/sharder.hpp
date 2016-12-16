@@ -368,7 +368,8 @@ namespace graphchi {
             curshovel_idx = 0;
             
             logstream(LOG_INFO) << "Starting preprocessing, shovel size: " << shovelsize << std::endl;
-            
+           
+            std::cerr << "Calling calloc. shovelsize: " << shovelsize << std::endl; 
             curshovel_buffer = (edge_with_value<EdgeDataType> *) calloc(shovelsize, sizeof(edge_with_value<EdgeDataType>));
             
             assert(curshovel_buffer != NULL);
@@ -592,6 +593,7 @@ namespace graphchi {
         void one_shard_intervals() {
             assert(nshards == 1);
             std::string fname = filename_intervals(basefilename, nshards);
+            std::cout << "Opening file here4" << std::endl;
             FILE * f = fopen(fname.c_str(), "w");
             intervals.push_back(std::pair<vid_t,vid_t>(0, max_vertex_id));
             fprintf(f, "%u\n", max_vertex_id);
@@ -674,6 +676,7 @@ namespace graphchi {
             size_t index_interval_edges = 1024 * 1024;
             
             // Create the final file
+            std::cout << "Opening here " << fname << std::endl;
             int f = open(fname.c_str(), O_WRONLY | O_CREAT, S_IROTH | S_IWOTH | S_IWUSR | S_IRUSR);
             if (f < 0) {
                 logstream(LOG_ERROR) << "Could not open " << fname << " error: " << strerror(errno) << std::endl;
@@ -831,8 +834,9 @@ namespace graphchi {
             /* Write edata size file */
             if (!no_edgevalues) {
                 edata_flush<FinalEdgeDataType>(ebuf, ebufptr, edfname, tot_edatabytes);
-                
+               
                 std::string sizefilename = edfname + ".size";
+                std::cout <<"Opening/Writing. size: " << sizefilename << std::endl; 
                 std::ofstream ofs(sizefilename.c_str());
 #ifndef DYNAMICEDATA
                 ofs << tot_edatabytes;
@@ -907,6 +911,7 @@ namespace graphchi {
             
             /* Write intervals */
             std::string fname = filename_intervals(basefilename, nshards);
+            std::cout << "Opening here2 " << fname << std::endl;
             FILE * f = fopen(fname.c_str(), "w");
             
             if (f == NULL) {
@@ -1045,6 +1050,7 @@ namespace graphchi {
             
             std::string outputfname = filename_degree_data(basefilename);
             
+            std::cout << "Opening here3 " << outputfname << std::endl;
             int degreeOutF = open(outputfname.c_str(), O_RDWR | O_CREAT, S_IROTH | S_IWOTH | S_IWUSR | S_IRUSR);
             if (degreeOutF < 0) {
                 logstream(LOG_ERROR) << "Could not create: " << degreeOutF << std::endl;

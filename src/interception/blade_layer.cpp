@@ -3,6 +3,8 @@
 #include <map>
 #include <cstdio>
 #include <iostream>
+#include <sys/types.h>
+#include <unistd.h>
 
 sirius::BladeFileClient client;
 
@@ -29,19 +31,21 @@ void blade_init() {
 }
 
 extern "C"
-ssize_t blade_write(int fd, void* data, size_t size) {
+ssize_t blade_write(int fd, void* data, size_t count) {
     std::cout << "Blade write fd:" << fd << std::endl;
 
+    //off_t offset = lseek(fd, 0, SEEK_CUR);
     off_t offset = fd_to_offset[fd];
-    if (offset + size > 1 * FILE_SIZE) {
+    if (offset + count > 1 * FILE_SIZE) {
         std::cout << "Blade write fd:" << fd << std::endl;
         exit(-1);
     }
 
-    fd_to_offset[fd] += size;
+    //lseek(fd, count, SEEK_CUR);
+    fd_to_offset[fd] += count;
 
-    client.write_sync(fd_to_rec[fd], offset, size, data);
-    return size;
+    client.write_sync(fd_to_rec[fd], offset, count, data);
+    return count;
 }
 
 extern "C"
@@ -59,8 +63,10 @@ ssize_t blade_pwrite(int fd, void* data, size_t size, off_t offset) {
 
 extern "C"
 ssize_t blade_read(int fd, void *buf, size_t count) {
-    std::cout << "Blade read fd:" << fd << std::endl;
+    printf("Blade read fd: %d\n", fd);
+    return 0;
 
+    //off_t offset = lseek(fd, 0, SEEK_CUR);
     off_t offset = fd_to_offset[fd];
     if (offset + count > 1 * FILE_SIZE) {
         std::cout << "Blade read fd:" << fd << std::endl;
@@ -69,6 +75,7 @@ ssize_t blade_read(int fd, void *buf, size_t count) {
 
     client.read_sync(fd_to_rec[fd], offset, count, buf);
 
+    //lseek(fd, count, SEEK_CUR);
     fd_to_offset[fd] += count;
 
     return count;
@@ -95,7 +102,8 @@ int blade_open(const char * pathname, int flags, mode_t mode) {
 
     path_to_rec[pathname] = alloc;
     path_to_fd[pathname] = opened_files;
-    fd_to_offset[opened_files] = 0;
+    
+    //fd_to_offset[opened_files] = 0;
     fd_to_rec[opened_files] = alloc;
 
     return opened_files++;
@@ -114,6 +122,23 @@ void blade_close(int fd) {
 extern "C"
 void blade_lseek(int fd, off_t offset, int whence) {
     puts("Blade lseek");
-    fd_to_offset[fd] = offset;
+    //lseek(fd, offset, whence);
+    if (whence == SEEK_CUR) { 
+        fd_to_offset[fd] += offset;
+    } else if (whence == SEEK_SET) {
+        fd_to_offset[fd] = offset;
+    } else if (whence == SEEK_END) {
+        exit(-1);
+    }
+}
+
+extern "C"
+char *blade_fgets(char *s, int size, FILE *stream) {
+    dummy();
+    int fd = fileno(stream);
+    printf("Blade read fd: %d\n", fd);
+    blade_read(fd, s, size);
+    puts("Blade read done");
+    return s;
 }
 

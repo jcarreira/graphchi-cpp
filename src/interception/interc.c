@@ -10,20 +10,23 @@
 #include <time.h>
 #include <string.h>
 
-//#define DISK
+size_t (*_read)(int, void*, size_t);
+ssize_t (*_pread)(int, void*, size_t, off_t);
+ssize_t (*_pwrite)(int, const void*, size_t, off_t);
+int (*_close)(int);
+int (*_open64)(const char*, int, mode_t);
+int (*_open)(const char*, int, ...);
+int (*_open2)(const char*, int);
+ssize_t (*_write)(int, const void*, size_t);
+off_t (*_lseek)(int, off_t, int);
 
-FILE* (*_fopen)(const char *path, const char *mode);
-size_t (*_fwrite)(const void*, size_t, size_t, FILE*);
-size_t (*_read)(int fd, void *buf, size_t count);
-ssize_t (*_pread)(int fd, void *buf, size_t count, off_t offset);
-ssize_t (*_pwrite)(int fd, const void *buf, size_t count, off_t offset);
-int (*_close)(int fd);
+int (*_ungetc)(int c, FILE *stream);
+
+FILE* (*_fopen)(const char*, const char*);
 int (*_fclose)(FILE*);
-int (*_open64)(const char * pathname, int flags, mode_t mode);
-int (*_open)(const char * pathname, int flags, ...);
-int (*_open2)(const char * pathname, int flags);
-ssize_t (*_write)(int fd, const void* bug, size_t count);
-off_t (*lseek_)(int fd, off_t offset, int whence);
+size_t (*_fread)(void*, size_t, size_t, FILE*);
+size_t (*_fwrite)(const void*, size_t, size_t, FILE*);
+char* (*_fgets)(char *s, int size, FILE *stream);
 
 //int open(const char * pathname, int flags, mode_t mode);
 
@@ -38,6 +41,7 @@ typedef int (*bclose_f)(int);
 typedef int (*bftruncate_f)(int);
 typedef off_t (*blseek_f)(int, off_t, int);
 typedef void (*binit_f)();
+typedef char* (*bfgets_f)(char*, int, FILE*);
 
 bwrite_f blade_write;
 bpwrite_f blade_pwrite;
@@ -49,7 +53,8 @@ bopen_f blade_open64;
 blseek_f blade_lseek;
 bclose_f blade_close;
 bftruncate_f blade_ftruncate;
-binit_f blade_init_;
+binit_f blade_init;
+bfgets_f blade_fgets;
 void* handle;
 
 #define NS_IN_SEC (1000000000L)
@@ -80,7 +85,7 @@ void init() {
        exit(-1);
    }
    
-   blade_init_ = (binit_f)dlsym(handle, "blade_init");
+   blade_init = (binit_f)dlsym(handle, "blade_init");
    blade_write = (bwrite_f)dlsym(handle, "blade_write");
    blade_pwrite = (bpwrite_f)dlsym(handle, "blade_pwrite");
    blade_read = (bread_f)dlsym(handle, "blade_read");
@@ -89,6 +94,7 @@ void init() {
    blade_open64 = (bopen_f)dlsym(handle, "blade_open64");
    blade_lseek = (blseek_f)dlsym(handle, "blade_lseek");
    blade_close = (bclose_f)dlsym(handle, "blade_close");
+   blade_fgets = (bfgets_f)dlsym(handle, "blade_fgets");
    
    puts("init() done");
    inited++;
@@ -113,22 +119,30 @@ void init_mapping() {
         dlsym(RTLD_NEXT, "open64");
     _close = (int (*)(int fd))
         dlsym(RTLD_NEXT, "close");
-    _fopen = (FILE* (*)(const char *path, const char *mode))
-        dlsym(RTLD_NEXT, "fopen");
     _write = (ssize_t (*)(int fd, const void* bug, size_t count))
         dlsym(RTLD_NEXT, "write");
     _pread = (ssize_t (*)(int fd, void *buf, size_t count, off_t offset))
         dlsym(RTLD_NEXT, "pread");
     _pwrite = (ssize_t (*)(int fd, const void *buf, size_t count, off_t offset))
         dlsym(RTLD_NEXT, "pwrite");
-    //_fwrite = (size_t (*)(const void*, size_t, size_t, FILE*))
-    //    dlsym(RTLD_NEXT, "fwrite");
     _read = (size_t (*)(int fd, void *buf, size_t count))
         dlsym(RTLD_NEXT, "read");
-    //_fclose = (int (*)(FILE*))
-    //    dlsym(RTLD_NEXT, "fclose");
-    lseek_ = (off_t (*)(int fd, off_t offset, int whence))
+    _lseek = (off_t (*)(int fd, off_t offset, int whence))
         dlsym(RTLD_NEXT, "lseek");
+
+    _ungetc = (int (*)(int c, FILE*))
+        dlsym(RTLD_NEXT, "ungetc");
+
+    _fopen = (FILE* (*)(const char *path, const char *mode))
+        dlsym(RTLD_NEXT, "fopen");
+    _fwrite = (size_t (*)(const void*, size_t, size_t, FILE*))
+        dlsym(RTLD_NEXT, "fwrite");
+    _fread = (size_t (*)(void*, size_t, size_t, FILE*))
+        dlsym(RTLD_NEXT, "fread");
+    _fgets = (char* (*)(char*, int, FILE*))
+        dlsym(RTLD_NEXT, "fgets");
+    _fclose = (int (*)(FILE*))
+        dlsym(RTLD_NEXT, "fclose");
 }
 
 char first = 0;
@@ -140,29 +154,25 @@ int open(const char * pathname, int flags, ...)
     if (first == 0) { 
         first = 1;
         puts("Calling blade init");
-        blade_init_();
+        blade_init();
         puts("Blade init done");
     }
 
-#ifdef DISK
-    return _open(pathname, flags);
-    //return _open(pathname, flags, mode);
-#else
-    if (strncmp("/sys", pathname, 4) == 0 ||
-            strncmp("/dev", pathname, 4) == 0) {
-        printf("regular open: %s\n", pathname);
-        return _open(pathname, flags);
-        //return _open(pathname, flags, mode);
-    }
-    else {
-        printf("blade_open\n");
+    if (0 && strncmp("/data/joao/ligra/utils/", pathname, 
+                strlen("/data/joao/ligra/utils/")) == 0) {
+        printf("calling blade_open\n");
         int ret = blade_open(pathname, flags, 0);
+        printf("blade_open fd: %d\n", ret);
         is_good_fd[ret] = 1;
         return ret;
-    }
-#endif
-}
+    } else {
+        printf("regular open: %s\n", pathname);
+        int ret = _open(pathname, flags);
+        printf("ret fd: %d\n", ret);
+        return ret;
 
+    }
+}
 
 int open64(const char * pathname, int flags, mode_t mode)
 {
@@ -172,16 +182,11 @@ int open64(const char * pathname, int flags, mode_t mode)
 }
 
 int close(int fd) {
-    puts("close");
-#ifdef DISK
-    int ret = _close(fd);
-    return ret;
-#else
+    printf("close fd: %d\n", fd);
     if (is_good_fd[fd])
         return blade_close(fd);
     else
         return _close(fd);
-#endif
 }
 
 int creat(const char *pathname, mode_t mode) {
@@ -190,151 +195,149 @@ int creat(const char *pathname, mode_t mode) {
     return 0;
 }
 
-FILE *fopen(const char *path, const char *mode) {
-    printf("fopen path: %s\n", path);
-    init_mapping();
-    FILE* ret = _fopen(path, mode);
-    return ret;
-}
-
-//FILE *fdopen(int fd, const char *mode) {
-//    puts("fdopen");
-//    exit(-1);
-//    return 0;
-//}
-//
-//FILE *freopen(const char *path, const char *mode, FILE *stream) {
-//    puts("freopen1");
-//    exit(-1);
-//    return 0;
-//}
-
 ssize_t write(int fd, const void *buf, size_t count) {
-    puts("write");
+    printf("write fd:%d\n", fd);
     init_mapping();
-#ifdef DISK
-    ssize_t ret = _write(fd, buf, count);
-    return ret;
-#else
     if (is_good_fd[fd])
         return blade_write(fd, buf, count);
     else
         return _write(fd, buf, count);
-#endif
 }
 
 ssize_t pread(int fd, void *buf, size_t count, off_t offset) {
     puts("pread");
-    ull start = get_time();
     init_mapping();
-#ifdef DISK
-    ssize_t ret = _pread(fd, buf, count, offset);
-    printf("size: %lu %llu\n", count, get_time() - start);
-    return ret;
-#else
     if (is_good_fd[fd])
         return blade_pread(fd, buf, count, offset);
     else
         return _pread(fd, buf, count, offset);
-#endif
 }
 
 ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset) {
     puts("pwrite");
-    //ull start = get_time();
     init_mapping();
-#ifdef DISK
-    ssize_t ret = _pwrite(fd, buf, count, offset);
-    return ret;
-#else
     if (is_good_fd[fd])
         return blade_pwrite(fd, buf, count, offset);
     else
         return _pwrite(fd, buf, count, offset);
-#endif
 }
 
 ssize_t read(int fd, void *buf, size_t count) {
     puts("read");
-    ull start = get_time();
     init_mapping();
-#ifdef DISK
-    ssize_t ret = _read(fd, buf, count);
-    return ret;
-#else
     if (is_good_fd[fd])
         return blade_read(fd, buf, count);
     else
         return _read(fd, buf, count);
-#endif
 }
 
-//size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
-//    puts("fread");
-//    exit(-1);
-//    return 0;
-//}
-//
-//size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
-//    //puts("fwrite");
-//    //ull start = get_time();
-//    init_mapping();
-//    size_t ret = _fwrite(ptr, size, nmemb, stream);
-//    //printf("%llu\n", get_time() - start);
-//    return ret;
-//}
-//
-//int fclose(FILE *fp) {
-//    //ull start = get_time();
-//    init_mapping();
-//    int ret = _fclose(fp);
-//    //printf("%llu\n", get_time() - start);
-//    return ret;
-//}
 
 int stat(const char *path, struct stat *buf) {
     puts("stat");
     exit(-1);
+    return -1;
 }
 
 int fstat(int fd, struct stat *buf) {
     puts("fstat");
     exit(-1);
+    return -1;
 }
 
 int lstat(const char *path, struct stat *buf) {
     puts("lstat");
     exit(-1);
+    return -1;
 }
 
 int truncate(const char *path, off_t length) {
     puts("truncate");
     exit(-1);
+    return -1;
 }
 
 int ftruncate(int fd, off_t length) {
     printf("ftruncate. fd: %d length: %lu\n", fd, length);
     init_mapping();
 
+    // we do nothing because we assume our memory pool is big
+    // enough. watch out
+
     return 0;
 }
 
 off_t lseek(int fd, off_t offset, int whence) {
-    puts("lseek");
+    printf("lseek. fd: %d\n", fd);
     init_mapping();
-#ifdef DISK
-    return lseek_(fd, offset, whence);
-#else
     if (is_good_fd[fd])
         return blade_lseek(fd, offset, whence);
     else
-        return lseek_(fd, offset, whence);
-#endif
+        return _lseek(fd, offset, whence);
 }
 
 off64_t lseek64(int fd, off64_t offset, int whence) {
     puts("lseek64");
     exit(-1);
+}
+
+void rewind(FILE *stream) {
+    puts("rewind");
+    exit(-1);
+}
+
+// FILE* interface
+
+
+FILE *fopen(const char *path, const char *mode) {
+    init_mapping();
+    printf("fopen path: %s\n", path);
+
+    FILE* ret = _fopen(path, mode);
+    printf("ret: %lu\n", (unsigned long long int) ret);
+    if (ret)
+        printf("fileno ret: %d\n", fileno(ret));
+    if (0 && strncmp(path, "/data/joao/", strlen("/data/joao")) == 0) {
+        // mark this fd so that next read()
+        printf("Marking file\n");
+        is_good_fd[fileno(ret)] = 1;
+        return ret;
+    } else {
+        return ret;
+    }
+}
+
+size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
+    puts("fread");
+    int fd = fileno(stream);
+    if (is_good_fd[fd]) {
+        return blade_read(fd, ptr, size);
+    } else {
+        return _fread(ptr, size, nmemb, stream);
+    }
+}
+
+size_t fwrite(const void *ptr, size_t size, size_t nmemb,
+                                    FILE *stream) {
+    int fd = fileno(stream);
+    printf("fwrite fd:%d\n", fd);
+    if (is_good_fd[fd]) {
+        return blade_write(fd, ptr, size);
+    } else {
+        return _fwrite(ptr, size, nmemb, stream);
+    }
+}
+
+
+FILE *fdopen(int fd, const char *mode) {
+    puts("fdopen");
+    exit(-1);
+    return 0;
+}
+
+FILE *freopen(const char *path, const char *mode, FILE *stream) {
+    puts("freopen1");
+    exit(-1);
+    return 0;
 }
 
 int fseek(FILE *stream, long offset, int whence) {
@@ -347,12 +350,57 @@ long ftell(FILE *stream) {
     exit(-1);
 }
 
-void rewind(FILE *stream) {
-    puts("rewind");
-    exit(-1);
-}
-
 int fgetpos(FILE *stream, fpos_t *pos) {
     puts("fgetpos");
     exit(-1);
 }
+
+//int fsetpos(FILE *stream, fpos_t *pos) {
+//    puts("fsetpos");
+//    exit(-1);
+//}
+
+
+int fgetc(FILE *stream) {
+    puts("fgetc");
+    exit(-1);
+}
+
+char *fgets(char *s, int size, FILE *stream) {
+    printf("Computing fgets\n");
+    int fd = fileno(stream);
+    printf("fgets. fd: %d\n", fd);
+    init_mapping();
+
+    if (is_good_fd[fd]) {
+        printf("blade fgets\n");
+        return blade_fgets(s, size, stream);
+    } else {
+        char* ret = _fgets(s, size, stream);
+        printf("normal fgets ret: %d\n", ret);
+        return ret;
+    }
+}
+
+int getc(FILE *stream) {
+    puts("getc");
+    exit(-1);
+}
+
+int getchar(void) {
+    puts("getchar");
+    exit(-1);
+}
+
+char *gets(char *s) {
+    puts("gets");
+    exit(-1);
+}
+
+int ungetc(int c, FILE *stream) {
+    init_mapping();
+    int fd = fileno(stream);
+    printf("ungetc. fd: %d\n", fd);
+    return _ungetc(c, stream);
+}
+
