@@ -1,0 +1,3 @@
+[submodule "external/ddc"]
+	path = external/ddc
+	url = https://github.com/jcarreira/ddc.git

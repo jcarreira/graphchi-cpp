@@ -4,7 +4,7 @@
 #define SIZE (10*GB)
 
 static const char* IP = "10.10.49.83";
-static const int PORT = 12345;
+static const char* PORT = "12345";
 
 #define PATH "/data/joao/ligra/utils/my_edge_1M"
 

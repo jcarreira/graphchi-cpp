@@ -10,6 +10,8 @@
 #include <time.h>
 #include <string.h>
 
+#define DEBUG
+
 size_t (*_read)(int, void*, size_t);
 ssize_t (*_pread)(int, void*, size_t, off_t);
 ssize_t (*_pwrite)(int, const void*, size_t, off_t);
@@ -24,6 +26,7 @@ int (*_ungetc)(int c, FILE *stream);
 
 FILE* (*_fopen)(const char*, const char*);
 int (*_fclose)(FILE*);
+int (*_ftruncate)(int, off_t);
 size_t (*_fread)(void*, size_t, size_t, FILE*);
 size_t (*_fwrite)(const void*, size_t, size_t, FILE*);
 char* (*_fgets)(char *s, int size, FILE *stream);
@@ -38,7 +41,7 @@ typedef int (*bopen_f)(const char*, int, mode_t);
 typedef FILE (*bfopen_f)(const char*, const char*);
 typedef int (*bopen2_f)(const char*, int);
 typedef int (*bclose_f)(int);
-typedef int (*bftruncate_f)(int);
+typedef int (*bftruncate_f)(int, off_t);
 typedef off_t (*blseek_f)(int, off_t, int);
 typedef void (*binit_f)();
 typedef char* (*bfgets_f)(char*, int, FILE*);
@@ -95,6 +98,7 @@ void init() {
    blade_lseek = (blseek_f)dlsym(handle, "blade_lseek");
    blade_close = (bclose_f)dlsym(handle, "blade_close");
    blade_fgets = (bfgets_f)dlsym(handle, "blade_fgets");
+   blade_ftruncate = (bftruncate_f)dlsym(handle, "blade_ftruncate");
    
    puts("init() done");
    inited++;
@@ -143,6 +147,8 @@ void init_mapping() {
         dlsym(RTLD_NEXT, "fgets");
     _fclose = (int (*)(FILE*))
         dlsym(RTLD_NEXT, "fclose");
+    _ftruncate = (int (*)(int, off_t))
+        dlsym(RTLD_NEXT, "ftruncate");
 }
 
 char first = 0;
@@ -260,19 +266,35 @@ int ftruncate(int fd, off_t length) {
     printf("ftruncate. fd: %d length: %lu\n", fd, length);
     init_mapping();
 
-    // we do nothing because we assume our memory pool is big
-    // enough. watch out
+    if (is_good_fd[fd]) {
+#ifdef DEBUG
+        printf("blade ftruncate. fd: %d length: %lu\n", fd, length);
+#endif
+        return blade_ftruncate(fd, length);
+    } else {
+#ifdef DEBUG
+        printf("normal ftruncate. fd: %d length: %lu\n", fd, length);
+#endif
+        return _ftruncate(fd, length);
+    }
 
     return 0;
 }
 
 off_t lseek(int fd, off_t offset, int whence) {
-    printf("lseek. fd: %d\n", fd);
+
     init_mapping();
-    if (is_good_fd[fd])
+    if (is_good_fd[fd]) {
+#ifdef DEBUG
+        printf("blade lseek. fd: %d\n", fd);
+#endif
         return blade_lseek(fd, offset, whence);
-    else
+    } else {
+#ifdef DEBUG
+        printf("normal lseek. fd: %d\n", fd);
+#endif
         return _lseek(fd, offset, whence);
+    }
 }
 
 off64_t lseek64(int fd, off64_t offset, int whence) {
@@ -290,12 +312,16 @@ void rewind(FILE *stream) {
 
 FILE *fopen(const char *path, const char *mode) {
     init_mapping();
+#ifdef DEBUG
     printf("fopen path: %s\n", path);
+#endif
 
     FILE* ret = _fopen(path, mode);
-    printf("ret: %lu\n", (unsigned long long int) ret);
+#ifdef DEBUG
+    printf("ret: %llu\n", (unsigned long long int) ret);
     if (ret)
         printf("fileno ret: %d\n", fileno(ret));
+#endif
     if (0 && strncmp(path, "/data/joao/", strlen("/data/joao")) == 0) {
         // mark this fd so that next read()
         printf("Marking file\n");
@@ -377,7 +403,7 @@ char *fgets(char *s, int size, FILE *stream) {
         return blade_fgets(s, size, stream);
     } else {
         char* ret = _fgets(s, size, stream);
-        printf("normal fgets ret: %d\n", ret);
+        printf("normal fgets ret: %d\n", ret != NULL);
         return ret;
     }
 }
