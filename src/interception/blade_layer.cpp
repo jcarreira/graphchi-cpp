@@ -18,6 +18,9 @@ int opened_files = 100;
 #define GB (1024*1024*1024)
 #define FILE_SIZE (1 * GB)
 
+static const char* IP   = "10.10.49.83";
+static const char* PORT = "99999";
+
 extern "C"
 void dummy() {
     puts("dummy");
@@ -26,7 +29,7 @@ void dummy() {
 extern "C"
 void blade_init() {
     puts("Blade init2");
-    client.connect("10.10.49.83", "12345");
+    client.connect(IP, PORT);
     puts("Blade connected");
 }
 
@@ -142,3 +145,7 @@ char *blade_fgets(char *s, int size, FILE *stream) {
     return s;
 }
 
+extern "C"
+int blade_ftruncate(int fd, off_t length) {
+    return 0;
+}
