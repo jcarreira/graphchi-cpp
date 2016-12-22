@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include "posix_api.h"
+#include <stdarg.h>
 #include "log.h"
 
 #define DEBUG
@@ -19,10 +20,15 @@
 #define FILE_SIZE (1000000000)
 
 // set to 1 to intercept calls to specific file
-#define ENABLE 0
+#define ENABLE 1
 #define INFO 0
+#define FD_SIZE 10000
+
+#define LOCK
+#define UNLOCK
 
 #define NOT_IMPLEMENTED(str) { printf("Not implemented %s\n", str); exit(-1); }
+ssize_t open_file_copy(char* fname, char* ptr);
 
 
 pthread_mutex_t mutex;
@@ -32,13 +38,12 @@ typedef unsigned long long int ull;
 //static void init() __attribute__((constructor));
 static void my_exit() __attribute__((destructor));
 
-char is_good_fd[10000] = {0};
+char is_special_fd[FD_SIZE] = {0};
+int special_fd_size[FD_SIZE] = {0};
 int fd_counter = 100;
 
 char* file_data[1000];
 int file_ptr[1000];
-int special_fd = 0;
-int special_fd_size = 0;
 
 void my_exit() {}
     
@@ -54,45 +59,12 @@ void init_mapping() {
         return;
     mapping_inited = 1;
 
+    load_posix();
+
     //pthread_mutexattr_t attr;
     //pthread_mutexattr_init(&attr);
     //pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
     //pthread_mutex_init(&mutex, &attr);
-    
-    _open = (int (*)(const char * pathname, int flags, ...))
-        dlsym(RTLD_NEXT, "open");
-    _open64 = (int (*)(const char * pathname, int flags, mode_t))
-        dlsym(RTLD_NEXT, "open64");
-    _close = (int (*)(int fd))
-        dlsym(RTLD_NEXT, "close");
-    _write = (ssize_t (*)(int fd, const void* bug, size_t count))
-        dlsym(RTLD_NEXT, "write");
-    _pread = (ssize_t (*)(int fd, void *buf, size_t count, off_t offset))
-        dlsym(RTLD_NEXT, "pread");
-    _pwrite = (ssize_t (*)(int fd, const void *buf, size_t count, off_t offset))
-        dlsym(RTLD_NEXT, "pwrite");
-    _read = (size_t (*)(int fd, void *buf, size_t count))
-        dlsym(RTLD_NEXT, "read");
-    _lseek = (off_t (*)(int fd, off_t offset, int whence))
-        dlsym(RTLD_NEXT, "lseek");
-
-    _ungetc = (int (*)(int c, FILE*))
-        dlsym(RTLD_NEXT, "ungetc");
-
-    _fopen = (FILE* (*)(const char *path, const char *mode))
-        dlsym(RTLD_NEXT, "fopen");
-    _fwrite = (size_t (*)(const void*, size_t, size_t, FILE*))
-        dlsym(RTLD_NEXT, "fwrite");
-    _fread = (size_t (*)(void*, size_t, size_t, FILE*))
-        dlsym(RTLD_NEXT, "fread");
-    _fgets = (char* (*)(char*, int, FILE*))
-        dlsym(RTLD_NEXT, "fgets");
-    _fprintf = (int (*)(FILE*, const char*, ...))
-        dlsym(RTLD_NEXT, "fprintf");
-    _fclose = (int (*)(FILE*))
-        dlsym(RTLD_NEXT, "fclose");
-    _ftruncate = (int (*)(int, off_t))
-        dlsym(RTLD_NEXT, "ftruncate");
 }
 
 void print_flags(int flags) {
@@ -105,42 +77,45 @@ void print_flags(int flags) {
 
 char first = 0;
 int open(const char * pathname, int flags, ...) {
-    init_mapping();
     LOG(INFO, ("open fname: %s\n", pathname));
     print_flags(flags);
+    init_mapping();
    
-    pthread_mutex_lock(&mutex);
+    LOCK;
     if (ENABLE && strcmp("/data/joao/ligra/utils/my_edge_1M", pathname) == 0) {
+        // XXX we need to associate this filename to this fd
         int fd = fd_counter++;
-        is_good_fd[fd] = 1;
+        is_special_fd[fd] = 1;
+        file_ptr[fd] = 0;
         file_data[fd] = (char*)malloc(FILE_SIZE);
-        pthread_mutex_unlock(&mutex);
-        LOG(INFO, ("blade open returning fd: %d\n", fd));
+        ssize_t size = open_file_copy("/data/joao/ligra/utils/my_edge_1M", file_data[fd]);
+        special_fd_size[fd] = size;
+        LOG(INFO, ("special file returning fd: %d\n", fd));
+        UNLOCK;
         return fd;
     } else {
-        LOG(INFO, ("regular open: %s\n", pathname));
         int ret = _open(pathname, flags);
-        LOG(INFO, ("ret fd: %d\n", ret));
-        pthread_mutex_unlock(&mutex);
+        LOG(INFO, ("regular open: %s. returning fd: %d\n", pathname, ret));
+        UNLOCK;
         return ret;
 
     }
 }
 
 int close(int fd) {
-    pthread_mutex_lock(&mutex);
+    LOCK;
 
-    if (is_good_fd[fd]) {
+    if (is_special_fd[fd]) {
 #ifdef DEBUG
         LOG(INFO, ("blade close fd: %d\n", fd));
 #endif
-        pthread_mutex_unlock(&mutex);
+        UNLOCK;
         return 0;
     } else {
 #ifdef DEBUG
         LOG(INFO, ("normal close fd: %d\n", fd));
 #endif
-        pthread_mutex_unlock(&mutex);
+        UNLOCK;
         return _close(fd);
     }
 }
@@ -149,22 +124,22 @@ ssize_t write(int fd, const void *buf, size_t count) {
     LOG(INFO, ("write fd: %d\n", fd));
     init_mapping();
     
-    pthread_mutex_lock(&mutex);
-    if (is_good_fd[fd]) {
+    LOCK;
+    if (is_special_fd[fd]) {
         LOG(INFO, ("blade write fd:%d\n", fd));
-        pthread_mutex_unlock(&mutex);
+        UNLOCK;
         memcpy(file_data[fd] + file_ptr[fd], buf, count);
         file_ptr[fd] += count;
         return count;
     } else {
-        pthread_mutex_unlock(&mutex);
+        UNLOCK;
         return _write(fd, buf, count);
     }
 }
 
 ssize_t pread(int fd, void *buf, size_t count, off_t offset) {
     init_mapping();
-    if (is_good_fd[fd]) {
+    if (is_special_fd[fd]) {
 #ifdef DEBUG
         LOG(INFO, ("blade pread. fd: %d count: %lu offset: %lu\n", fd, count, offset));
 #endif
@@ -181,7 +156,7 @@ ssize_t pread(int fd, void *buf, size_t count, off_t offset) {
 ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset) {
     LOG(INFO, ("pwrite"));
     init_mapping();
-    if (is_good_fd[fd]) {
+    if (is_special_fd[fd]) {
         LOG(INFO, ("blade pwrite"));
         memcpy(file_data[fd] + offset, buf, count);
         return count;
@@ -194,7 +169,7 @@ ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset) {
 ssize_t read(int fd, void *buf, size_t count) {
     LOG(INFO, ("read"));
     init_mapping();
-    if (is_good_fd[fd]) {
+    if (is_special_fd[fd]) {
         NOT_IMPLEMENTED("blade read");
         memcpy(buf, file_data[fd] + file_ptr[fd], count);
         file_ptr[fd] += count;
@@ -208,7 +183,7 @@ int ftruncate(int fd, off_t length) {
     LOG(INFO, ("ftruncate. fd: %d length: %lu\n", fd, length));
     init_mapping();
 
-    if (is_good_fd[fd]) {
+    if (is_special_fd[fd]) {
 #ifdef DEBUG
         LOG(INFO, ("blade ftruncate. fd: %d length: %lu\n", fd, length));
 #endif
@@ -228,7 +203,7 @@ off_t lseek(int fd, off_t offset, int whence) {
     printf("lseek. fd: %d\n", fd);
 
     init_mapping();
-    if (is_good_fd[fd]) {
+    if (is_special_fd[fd]) {
         LOG(INFO, ("blade lseek. fd: %d\n", fd));
         exit(-1);
 #ifdef DEBUG
@@ -244,18 +219,20 @@ off_t lseek(int fd, off_t offset, int whence) {
 
 // *****************************
 
-void open_file_copy(char* fname, char* ptr) {
+ssize_t open_file_copy(char* fname, char* ptr) {
     LOG(INFO, ("Opening file %s\n", fname));
     int fd = _open(fname, 0);
     if (!fd)
         exit(-1);
 
-    int size = _read(fd, ptr, FILE_SIZE);
-    special_fd_size = size;
+    ssize_t size = _read(fd, ptr, FILE_SIZE);
 
-    LOG(INFO, ("Opened %s size: %d fd: %lu errno: %d\n", fname, size, fd, errno));
+    _printf ("Read: %.20s\n", ptr);
+
+    LOG(INFO, ("Opened %s size: %lu fd: %d errno: %d\n", fname, size, fd, errno));
 
     _close(fd);
+    return size;
 }
 
 // ***************************************
@@ -270,30 +247,24 @@ FILE *fopen(const char *path, const char *mode) {
     // We open a file just to make sure we return a good fd
     // let's hope we capture all accesses to this fd
     if (ENABLE && strcmp(path, "/data/joao/ligra/utils/my_edge_1M") == 0) {
-        // mark this fd so that next read()
-        //char filename[100];
+        LOG(INFO, ("special file: %s mode: %s\n", path, mode));
+
         int fd = fd_counter++;
-        special_fd = fd;
-        file_ptr[fd] = 0;
-        //FILE* ret = _fopen(tmpnam_r(filename), "ab+");
-#ifdef DEBUG
-        LOG(INFO, ("Marking file\n"));
-#endif
-
-        open_file_copy("/data/joao/ligra/utils/my_edge_1M", file_data[fd]);
-
-        //int fd = fileno(ret);
+        is_special_fd[fd] = 1;
         file_data[fd] = (char*)malloc(FILE_SIZE);
-        is_good_fd[fd] = 1;
+        file_ptr[fd] = 0;
 
-        LOG(INFO, ("returning file our fd: %d\n", fd));
+        ssize_t size = open_file_copy("/data/joao/ligra/utils/my_edge_1M", file_data[fd]);
+        special_fd_size[fd] = size;
+
+        LOG(INFO, ("returning fake fd: %d\n", fd));
         return (FILE*)fd;
     } else {
         FILE* ret = _fopen(path, mode);
 #ifdef DEBUG
         LOG(INFO, ("normal ret: %llu\n", (unsigned long long int) ret));
         if (ret)
-            LOG(INFO, ("normal fileno ret: %d\n", fileno(ret)));
+            LOG(INFO, ("normal fileno ret: %d\n", _fileno(ret)));
 #endif
         return ret;
     }
@@ -302,8 +273,8 @@ FILE *fopen(const char *path, const char *mode) {
 size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     printf("fread. size: %lu nmemb: %lu\n", size, nmemb);
     exit(-1);
-    int fd = fileno(stream);
-    if (is_good_fd[fd]) {
+    int fd = _fileno(stream);
+    if (is_special_fd[fd]) {
 #ifdef DEBUG
         printf("blade fread. size: %lu nmemb: %lu\n", size, nmemb);
 #endif
@@ -321,12 +292,8 @@ size_t fwrite(const void *ptr, size_t size, size_t nmemb,
 #ifdef DEBUG
     //printf("fwrite\n");
 #endif
-    int fd = fileno(stream);
-#ifdef DEBUG
-    //if (fd != 1)
-    //    printf("fwrite fd:%d\n", fd);
-#endif
-    if (is_good_fd[fd]) {
+    int fd = _fileno(stream);
+    if (is_special_fd[fd]) {
         NOT_IMPLEMENTED("blade fwrite");
         return 0; // XXX fix
     } else {
@@ -334,38 +301,87 @@ size_t fwrite(const void *ptr, size_t size, size_t nmemb,
     }
 }
 
+int is_special_stream(FILE* stream) {
+    int fd = (int)stream;
+    return fd < FD_SIZE && is_special_fd[fd];
+}
+
 char *fgets(char *s, int size, FILE *stream) {
+    LOG(INFO, ("Doing fgets size: %d\n", size));
     init_mapping();
 
-    if (stream == special_fd) {
-    //if (is_good_fd[fd]) {
-        LOG(INFO, ("blade fgets\n"));
-        LOG(INFO, ("%s\n", file_data[file_ptr[special_fd]]));
+    if (is_special_stream(stream)) {
+        int fd = (int)stream;
+        LOG(INFO, ("blade fgets file_ptr: %d fd: %d\n", file_ptr[fd], fd));
         int count = 1;
-        while (file_ptr[special_fd] < special_fd_size &&
-                file_data[file_ptr[special_fd]] != '\n' &&
-                file_data[file_ptr[special_fd]]) {
-            *s = file_data[file_ptr[special_fd]++];
+
+        _printf ("fgets reading string: %.20s\n", file_data[fd] + file_ptr[fd]);
+
+        while (file_ptr[fd] < special_fd_size[fd] &&
+                *(file_data[fd]+file_ptr[fd]) != '\n' &&
+                *(file_data[fd]+file_ptr[fd])) {
+            *s = *(file_data[fd]+file_ptr[fd]);
+            file_ptr[fd]++;
             ++s;
             count++;
         }
-        *s = file_data[file_ptr[special_fd]++];
+        *s = file_data[file_ptr[fd]++];
         LOG(INFO, ("blade fgets ret: %d\n", count));
         return count;
     } else {
         char* ret = _fgets(s, size, stream);
-        //printf("normal fgets ret: %d\n", ret != NULL);
         return ret;
     }
 }
 
 int ungetc(int c, FILE *stream) {
     init_mapping();
-    int fd = fileno(stream);
+    int fd = _fileno(stream);
     LOG(INFO, ("ungetc. fd: %d\n", fd));
     return _ungetc(c, stream);
 }
 
+int fileno( FILE *stream) { 
+    LOG(INFO, ("fileno\n"));
+    init_mapping();
+    return _fileno(stream);
+}
+int fflush(FILE* stream) { 
+    LOG(INFO, ("fflush\n"));
+    init_mapping();
+    return _fflush(stream);
+}
+
+int puts(const char *s) { 
+    LOG(INFO, ("puts\n"));
+    init_mapping();
+    return _puts(s);
+}
+
+int printf(const char *format, ...) {
+    LOG(INFO, ("printf\n"));
+    init_mapping();
+    va_list va;
+    int ret;
+
+    va_start(va, format);
+    ret = _vfprintf(stderr, format, va);
+    va_end(va);
+    return ret;
+}
+
+int vfprintf(FILE *stream, const char *format, va_list ap) {
+    NOT_IMPLEMENTED("vfprintf");
+    LOG(INFO, ("vfprintf\n"));
+    init_mapping();
+    return _vfprintf(stream, format, ap);
+}
+
+int fputs(const char *s, FILE *stream) { 
+    LOG(INFO, ("fputs\n"));
+    init_mapping();
+    return _fputs(s, stream);
+}
 
 FILE *fdopen(int fd, const char *mode) { NOT_IMPLEMENTED("fdopen"); } 
 FILE *freopen(const char *path, const char *mode, FILE *stream) { NOT_IMPLEMENTED("freopen"); } 
@@ -385,3 +401,13 @@ int fstat(int fd, struct stat *buf) { NOT_IMPLEMENTED("fstat"); }
 int lstat(const char *path, struct stat *buf) { NOT_IMPLEMENTED("lstat"); } 
 int truncate(const char *path, off_t length) { NOT_IMPLEMENTED("truncate"); } 
 int open64(const char * pathname, int flags, ...) { NOT_IMPLEMENTED("open64"); }
+int access(const char *pathname, int mode) { NOT_IMPLEMENTED("access"); }
+int fcntl(int fd, int cmd, ...) { NOT_IMPLEMENTED("fcntl"); }
+int dup(int oldfd) { NOT_IMPLEMENTED("dup"); }
+int dup2(int oldfd, int newfd) { NOT_IMPLEMENTED("dup2"); }
+int pipe(int filedes[2]) { NOT_IMPLEMENTED("pipe"); }
+int mkfifo( const char *pathname, mode_t mode ) { NOT_IMPLEMENTED("mkfifo"); }
+mode_t umask(mode_t mask) { NOT_IMPLEMENTED("umask"); }
+int fputc(int c, FILE *stream) { NOT_IMPLEMENTED("fputc"); }
+int putc(int c, FILE *stream) { NOT_IMPLEMENTED("putc"); }
+int putchar(int c) { NOT_IMPLEMENTED("putchar"); }

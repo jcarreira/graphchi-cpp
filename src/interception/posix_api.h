@@ -16,11 +16,15 @@ FILE* (*_fopen)(const char*, const char*);
 int (*_fclose)(FILE*);
 int (*_ftruncate)(int, off_t);
 size_t (*_fread)(void*, size_t, size_t, FILE*);
-int (*_fprintf)(FILE*, const char*, ...);
 size_t (*_fwrite)(const void*, size_t, size_t, FILE*);
 char* (*_fgets)(char *s, int size, FILE *stream);
 int (*_fileno)(FILE*);
 int (*_fflush)(FILE*);
+int (*_puts)(const char*);
+int (*_fputs)(const char *s, FILE *stream);
+int (*_fprintf)(FILE*, const char*, ...);
+int (*_printf)(const char *format, ...);
+int (*_vfprintf)(FILE *stream, const char *format, va_list ap);
 
 void load_posix() {
     _open = (int (*)(const char * pathname, int flags, ...))
@@ -59,4 +63,14 @@ void load_posix() {
         dlsym(RTLD_NEXT, "ftruncate");
     _fileno = (int (*)(FILE*))
         dlsym(RTLD_NEXT, "fileno");
+    _fflush = (int (*)(FILE*))
+        dlsym(RTLD_NEXT, "fflush");
+    _puts = (int (*)(const char*))
+        dlsym(RTLD_NEXT, "puts");
+    _printf = (int (*)(const char*, ...))
+        dlsym(RTLD_NEXT, "printf");
+    _vfprintf = (int (*)(FILE*, const char*, va_list))
+        dlsym(RTLD_NEXT, "vfprintf");
+    _fputs = (int (*)(const char *s, FILE *stream))
+        dlsym(RTLD_NEXT, "fputs");
 }
