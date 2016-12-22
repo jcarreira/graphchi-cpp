@@ -13,14 +13,16 @@
 #include "posix_api.h"
 #include <stdarg.h>
 #include "log.h"
+#include "uthash.h"
 
+//#define COMPARISON
 #define DEBUG
 #define NS_IN_SEC (1000000000L)
 #define US_IN_SEC (1000000L)
 #define FILE_SIZE (1000000000)
 
 // set to 1 to intercept calls to specific file
-#define ENABLE 0
+#define ENABLE 1
 #define INFO 0
 #define FD_SIZE 10000
 
@@ -41,9 +43,16 @@ static void my_exit() __attribute__((destructor));
 char is_special_fd[FD_SIZE] = {0};
 int special_fd_size[FD_SIZE] = {0};
 int fd_counter = 100;
-
 char* file_data[1000];
 int file_ptr[1000];
+
+struct fhandle_to_fd {
+    ssize_t file_handle;
+    int fd;
+    UT_hash_handle hh;
+};
+
+struct fhandle_to_fd* map = NULL;
 
 void my_exit() {}
     
@@ -83,6 +92,7 @@ int open(const char * pathname, int flags, ...) {
    
     LOCK;
     if (ENABLE && strcmp("/data/joao/ligra/utils/my_edge_1M", pathname) == 0) {
+        NOT_IMPLEMENTED("open");
         // XXX we need to associate this filename to this fd
         int fd = fd_counter++;
         is_special_fd[fd] = 1;
@@ -140,6 +150,7 @@ ssize_t write(int fd, const void *buf, size_t count) {
 ssize_t pread(int fd, void *buf, size_t count, off_t offset) {
     init_mapping();
     if (is_special_fd[fd]) {
+        NOT_IMPLEMENTED("pread");
 #ifdef DEBUG
         LOG(INFO, ("blade pread. fd: %d count: %lu offset: %lu\n", fd, count, offset));
 #endif
@@ -157,6 +168,7 @@ ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset) {
     LOG(INFO, ("pwrite"));
     init_mapping();
     if (is_special_fd[fd]) {
+        NOT_IMPLEMENTED("pwrite");
         LOG(INFO, ("blade pwrite"));
         memcpy(file_data[fd] + offset, buf, count);
         return count;
@@ -187,7 +199,7 @@ int ftruncate(int fd, off_t length) {
 #ifdef DEBUG
         LOG(INFO, ("blade ftruncate. fd: %d length: %lu\n", fd, length));
 #endif
-    exit(-1);
+        NOT_IMPLEMENTED("ftruncate");
         return 0; // XXX fix
     } else {
 #ifdef DEBUG
@@ -205,7 +217,7 @@ off_t lseek(int fd, off_t offset, int whence) {
     init_mapping();
     if (is_special_fd[fd]) {
         LOG(INFO, ("blade lseek. fd: %d\n", fd));
-        exit(-1);
+        NOT_IMPLEMENTED("lseek");
 #ifdef DEBUG
 #endif
         return 0; // XXX fix
@@ -258,6 +270,17 @@ FILE *fopen(const char *path, const char *mode) {
         special_fd_size[fd] = size;
 
         LOG(INFO, ("returning fake fd: %d\n", fd));
+
+#ifdef COMPARISON
+        FILE* ret = _fopen(path, mode);
+
+        struct fhandle_to_fd* s = (struct fhandle_to_fd*)malloc(sizeof(struct fhandle_to_fd));
+        s->file_handle = (ssize_t)ret;
+        s->fd = fd;
+        HASH_ADD_INT(map, file_handle, s);
+        return ret;
+#endif
+
         return (FILE*)fd;
     } else {
         FILE* ret = _fopen(path, mode);
@@ -289,9 +312,7 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 
 size_t fwrite(const void *ptr, size_t size, size_t nmemb,
                                     FILE *stream) {
-#ifdef DEBUG
-    //printf("fwrite\n");
-#endif
+    LOG(INFO, ("fwrite size: %d nmemb: %d\n", size, nmemb));
     int fd = _fileno(stream);
     if (is_special_fd[fd]) {
         NOT_IMPLEMENTED("blade fwrite");
@@ -301,6 +322,7 @@ size_t fwrite(const void *ptr, size_t size, size_t nmemb,
     }
 }
 
+static
 int is_special_stream(FILE* stream) {
     ssize_t fd = (ssize_t)stream;
     return fd < FD_SIZE && is_special_fd[fd];
@@ -325,7 +347,7 @@ char *fgets(char *s, int size, FILE *stream) {
         }
         int count = 1;
 
-        _printf ("fgets reading string: %.20s\n", file_data[fd] + file_ptr[fd]);
+        //_printf ("fgets reading string: %.20s\n", file_data[fd] + file_ptr[fd]);
 
         while (count < size && file_ptr[fd] < special_fd_size[fd] &&
                 *(file_data[fd]+file_ptr[fd]) != '\n' &&
@@ -399,6 +421,18 @@ int dup(int oldfd) {
     LOG(INFO, ("dup fd: %d\n", oldfd));
     init_mapping();
     return _dup(oldfd);
+}
+
+int fclose(FILE *fp) {
+    LOG(INFO, ("fclose\n"));
+    init_mapping();
+    
+    if (is_special_stream(fp)) {
+        LOG(INFO, ("fclose on special file\n"));
+    init_mapping();
+    } else {
+        return _fclose(fp);
+    }
 }
 
 FILE *fdopen(int fd, const char *mode) { NOT_IMPLEMENTED("fdopen"); } 

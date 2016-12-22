@@ -13,7 +13,6 @@ off_t (*_lseek)(int, off_t, int);
 int (*_ungetc)(int c, FILE *stream);
 
 FILE* (*_fopen)(const char*, const char*);
-int (*_fclose)(FILE*);
 int (*_ftruncate)(int, off_t);
 size_t (*_fread)(void*, size_t, size_t, FILE*);
 size_t (*_fwrite)(const void*, size_t, size_t, FILE*);
@@ -26,6 +25,7 @@ int (*_fprintf)(FILE*, const char*, ...);
 int (*_printf)(const char *format, ...);
 int (*_vfprintf)(FILE *stream, const char *format, va_list ap);
 int (*_dup)(int);
+int (*_fclose)(FILE *);
 
 void load_posix() {
     _open = (int (*)(const char * pathname, int flags, ...))
@@ -77,3 +77,4 @@ void load_posix() {
     _dup = (int (*)(int))
         dlsym(RTLD_NEXT, "dup");
 }
+
