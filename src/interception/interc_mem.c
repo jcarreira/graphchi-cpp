@@ -20,7 +20,7 @@
 #define FILE_SIZE (1000000000)
 
 // set to 1 to intercept calls to specific file
-#define ENABLE 1
+#define ENABLE 0
 #define INFO 0
 #define FD_SIZE 10000
 
@@ -316,7 +316,13 @@ char *fgets(char *s, int size, FILE *stream) {
 
     if (is_special_stream(stream)) {
         ssize_t fd = (ssize_t)stream;
-        LOG(INFO, ("blade fgets file_ptr: %d fd: %d\n", file_ptr[fd], fd));
+        LOG(INFO, ("blade fgets file_ptr: %d fd: %d size: %d\n",
+                    file_ptr[fd], fd, special_fd_size[fd]));
+
+        if (file_ptr[fd] >= special_fd_size[fd]) {
+            LOG(INFO, ("Reached end"));
+            return 0;
+        }
         int count = 1;
 
         _printf ("fgets reading string: %.20s\n", file_data[fd] + file_ptr[fd]);
@@ -335,6 +341,7 @@ char *fgets(char *s, int size, FILE *stream) {
         return s; // fgets returns the string passed
     } else {
         char* ret = _fgets(s, size, stream);
+        LOG(INFO, ("normal fgets size: %d ret: %lu\n", size, ret));
         return ret;
     }
 }
@@ -388,6 +395,12 @@ int fputs(const char *s, FILE *stream) {
     return _fputs(s, stream);
 }
 
+int dup(int oldfd) { 
+    LOG(INFO, ("dup fd: %d\n", oldfd));
+    init_mapping();
+    return _dup(oldfd);
+}
+
 FILE *fdopen(int fd, const char *mode) { NOT_IMPLEMENTED("fdopen"); } 
 FILE *freopen(const char *path, const char *mode, FILE *stream) { NOT_IMPLEMENTED("freopen"); } 
 int fseek(FILE *stream, long offset, int whence) { NOT_IMPLEMENTED("fseek"); } 
@@ -408,7 +421,6 @@ int truncate(const char *path, off_t length) { NOT_IMPLEMENTED("truncate"); }
 int open64(const char * pathname, int flags, ...) { NOT_IMPLEMENTED("open64"); }
 int access(const char *pathname, int mode) { NOT_IMPLEMENTED("access"); }
 int fcntl(int fd, int cmd, ...) { NOT_IMPLEMENTED("fcntl"); }
-int dup(int oldfd) { NOT_IMPLEMENTED("dup"); }
 int dup2(int oldfd, int newfd) { NOT_IMPLEMENTED("dup2"); }
 int pipe(int filedes[2]) { NOT_IMPLEMENTED("pipe"); }
 int mkfifo( const char *pathname, mode_t mode ) { NOT_IMPLEMENTED("mkfifo"); }

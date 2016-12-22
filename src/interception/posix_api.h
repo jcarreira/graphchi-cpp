@@ -25,6 +25,7 @@ int (*_fputs)(const char *s, FILE *stream);
 int (*_fprintf)(FILE*, const char*, ...);
 int (*_printf)(const char *format, ...);
 int (*_vfprintf)(FILE *stream, const char *format, va_list ap);
+int (*_dup)(int);
 
 void load_posix() {
     _open = (int (*)(const char * pathname, int flags, ...))
@@ -73,4 +74,6 @@ void load_posix() {
         dlsym(RTLD_NEXT, "vfprintf");
     _fputs = (int (*)(const char *s, FILE *stream))
         dlsym(RTLD_NEXT, "fputs");
+    _dup = (int (*)(int))
+        dlsym(RTLD_NEXT, "dup");
 }
