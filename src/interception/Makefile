@@ -6,8 +6,9 @@ CFLAGS    = -Wall -ggdb
 #-fPIC
 LDFLAGS   = -ldl
 #-fPIC
-INCLUDES  = -I/data/joao/ddc/src/client/  -I/data/joao/ddc/
-LINCLUDES = -L/data/joao/ddc/src/client/ -L/data/joao/ddc/src/common/ -L/data/joao/ddc/src/utils/ -L/data/joao/ddc/src/authentication/
+DDC_PATH  = /data/joao/graphchi-cpp/external/ddc
+INCLUDES  = -I$(DDC_PATH)/src/client/  -I$(DDC_PATH)
+LINCLUDES = -L$(DDC_PATH)/src/client/ -L$(DDC_PATH)/src/common/ -L$(DDC_PATH)/src/utils/ -L$(DDC_PATH)/src/authentication/
 LIBS      = -lclient -lcommon -lutils -lauthentication
 
 all:
@@ -15,8 +16,11 @@ all:
 	$(CC) $(CFLAGS) -fPIC -c -o interc.o interc.c -libverbs -lrdmacm
 	$(CC) $(CFLAGS) -shared -o interc.so interc.o -ldl -libverbs -lrdmacm
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o copy_file copy_file.cpp $(LDFLAGS) $(LINCLUDES) $(LIBS) -libverbs -lrdmacm -pthread
-	$(CC) $(CFLAGS) -fPIC -c -o ssd_interc.o ssd_interc.c
-	$(CC) $(CFLAGS) -shared -o ssd_interc.so ssd_interc.o -ldl
+	$(CC) $(CFLAGS) -fPIC -c -o interc_mem.o interc_mem.c
+	$(CC) $(CFLAGS) -shared -o interc_mem.so interc_mem.o -ldl
 
 clean:
-	rm *.o *.so -rf
+	rm *.o *.so copy_file -rf
+	
+#$(CC) $(CFLAGS) -fPIC -c -o ssd_interc.o ssd_interc.c
+#$(CC) $(CFLAGS) -shared -o ssd_interc.so ssd_interc.o -ldl
