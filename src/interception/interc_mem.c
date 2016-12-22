@@ -96,9 +96,11 @@ void init_mapping() {
 }
 
 void print_flags(int flags) {
-    LOG(INFO, ("flags: O_APPEND: %d O_ASYNC: %d O_CREAT: %d O_DIRECT: %d O_NONBLOCK: %d O_SYNC: %d\n", 
-                    flags & O_APPEND, flags & O_ASYNC, flags & O_CREAT, flags&O_DIRECT, flags&O_NONBLOCK,
-                    flags & O_SYNC));
+    LOG(INFO, ("flags (%d): O_APPEND: %d O_ASYNC: %d O_CREAT: %d O_DIRECT: %d O_NONBLOCK: %d O_SYNC: %d O_RDWR: %d O_RDONLY: %d O_WRONLY: %d\n", 
+                    flags,
+                    flags & O_APPEND, flags & O_ASYNC, flags & O_CREAT, 
+                    flags&O_DIRECT, flags&O_NONBLOCK,
+                    flags & O_SYNC, flags & O_RDWR, flags&O_RDONLY, flags&O_WRONLY));
 }
 
 char first = 0;
