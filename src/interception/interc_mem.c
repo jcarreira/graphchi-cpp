@@ -200,7 +200,7 @@ int ftruncate(int fd, off_t length) {
 }
 
 off_t lseek(int fd, off_t offset, int whence) {
-    printf("lseek. fd: %d\n", fd);
+    LOG(INFO, ("lseek. fd: %d\n", fd));
 
     init_mapping();
     if (is_special_fd[fd]) {
@@ -249,7 +249,7 @@ FILE *fopen(const char *path, const char *mode) {
     if (ENABLE && strcmp(path, "/data/joao/ligra/utils/my_edge_1M") == 0) {
         LOG(INFO, ("special file: %s mode: %s\n", path, mode));
 
-        int fd = fd_counter++;
+        ssize_t fd = fd_counter++;
         is_special_fd[fd] = 1;
         file_data[fd] = (char*)malloc(FILE_SIZE);
         file_ptr[fd] = 0;
@@ -271,17 +271,17 @@ FILE *fopen(const char *path, const char *mode) {
 }
 
 size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
-    printf("fread. size: %lu nmemb: %lu\n", size, nmemb);
-    exit(-1);
+    LOG(INFO, ("fread. size: %lu nmemb: %lu\n", size, nmemb));
+    NOT_IMPLEMENTED("fread");
     int fd = _fileno(stream);
     if (is_special_fd[fd]) {
 #ifdef DEBUG
-        printf("blade fread. size: %lu nmemb: %lu\n", size, nmemb);
+        LOG(INFO, ("blade fread. size: %lu nmemb: %lu\n", size, nmemb));
 #endif
         return 0; // XXX fix
     } else {
 #ifdef DEBUG
-        printf("normal fread. size: %lu nmemb: %lu\n", size, nmemb);
+        LOG(INFO, ("normal fread. size: %lu nmemb: %lu\n", size, nmemb));
 #endif
         return _fread(ptr, size, nmemb, stream);
     }
@@ -302,7 +302,7 @@ size_t fwrite(const void *ptr, size_t size, size_t nmemb,
 }
 
 int is_special_stream(FILE* stream) {
-    int fd = (int)stream;
+    ssize_t fd = (ssize_t)stream;
     return fd < FD_SIZE && is_special_fd[fd];
 }
 
@@ -310,14 +310,18 @@ char *fgets(char *s, int size, FILE *stream) {
     LOG(INFO, ("Doing fgets size: %d\n", size));
     init_mapping();
 
+    // fgets reads at most size-1
+    if (size <= 1)
+        return 0;
+
     if (is_special_stream(stream)) {
-        int fd = (int)stream;
+        ssize_t fd = (ssize_t)stream;
         LOG(INFO, ("blade fgets file_ptr: %d fd: %d\n", file_ptr[fd], fd));
         int count = 1;
 
         _printf ("fgets reading string: %.20s\n", file_data[fd] + file_ptr[fd]);
 
-        while (file_ptr[fd] < special_fd_size[fd] &&
+        while (count < size && file_ptr[fd] < special_fd_size[fd] &&
                 *(file_data[fd]+file_ptr[fd]) != '\n' &&
                 *(file_data[fd]+file_ptr[fd])) {
             *s = *(file_data[fd]+file_ptr[fd]);
@@ -325,9 +329,10 @@ char *fgets(char *s, int size, FILE *stream) {
             ++s;
             count++;
         }
-        *s = file_data[file_ptr[fd]++];
-        LOG(INFO, ("blade fgets ret: %d\n", count));
-        return count;
+        *s = *(file_data[fd]+file_ptr[fd]);
+        file_ptr[fd]++;
+        LOG(INFO, ("blade fgets count: %d ret: %lu\n", count, s));
+        return s; // fgets returns the string passed
     } else {
         char* ret = _fgets(s, size, stream);
         return ret;

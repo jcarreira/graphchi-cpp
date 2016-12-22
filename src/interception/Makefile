@@ -13,8 +13,6 @@ LIBS      = -lclient -lcommon -lutils -lauthentication
 
 all:
 	$(CXX) $(CXXFLAGS) -fPIC $(INCLUDES) -o blade_layer.so -shared blade_layer.cpp $(LDFLAGS) $(LINCLUDES) $(LIBS) -libverbs -lrdmacm
-	$(CC) $(CFLAGS) -fPIC -c -o interc.o interc.c -libverbs -lrdmacm
-	$(CC) $(CFLAGS) -shared -o interc.so interc.o -ldl -libverbs -lrdmacm
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o copy_file copy_file.cpp $(LDFLAGS) $(LINCLUDES) $(LIBS) -libverbs -lrdmacm -pthread
 	$(CC) $(CFLAGS) -fPIC -c -o interc_mem.o interc_mem.c
 	$(CC) $(CFLAGS) -shared -o interc_mem.so interc_mem.o -ldl
@@ -24,3 +22,7 @@ clean:
 	
 #$(CC) $(CFLAGS) -fPIC -c -o ssd_interc.o ssd_interc.c
 #$(CC) $(CFLAGS) -shared -o ssd_interc.so ssd_interc.o -ldl
+
+# interc.c        
+#$(CC) $(CFLAGS) -fPIC -c -o interc.o interc.c -libverbs -lrdmacm
+#$(CC) $(CFLAGS) -shared -o interc.so interc.o -ldl -libverbs -lrdmacm

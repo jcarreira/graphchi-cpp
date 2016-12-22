@@ -1,4 +1,4 @@
-#define LOG_LEVEL 10
+#define LOG_LEVEL -10
 
 FILE* flog = NULL;
 int flag = 0;
@@ -20,5 +20,6 @@ void log_init() {
         if ((LEVEL) < LOG_LEVEL && _printf != NULL) {\
                     _printf("%-20s | %3d |  ",__FUNCTION__,__LINE__); \
                     _printf STR; \
+                    if (_fflush != NULL) _fflush(stdout);\
                 } \
 } while(0);
